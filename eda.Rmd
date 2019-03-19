@@ -1,0 +1,35 @@
+---
+title: "EDA"
+author: "Nick CHin"
+date: "March 19, 2019"
+output:
+  html_document:
+    df_print: paged
+---
+
+We want to explore 2 different questions.
+
+a. Are statewide hate crimes linked to income inequality (and other possible predictors)?
+
+b. What factors contribute to income inequality and in which way?
+
+```{r, message=FALSE}
+library(readr)
+us_hate_crimes <- read_csv("data.csv")
+```
+
+We now perform 2 separate lasso regressions, with the `avg_hatecrimes_per_100k_fbi` and `gini_index` as outcome variables to assess which predictor variables we should select for further analysis.
+```{r, message=FALSE, warning= FALSE}
+library(glmnet)
+crimes <- us_hate_crimes[complete.cases(us_hate_crimes),]
+crimes_model <- model.matrix(avg_hatecrimes_per_100k_fbi ~ . - state,
+                             data = crimes)[,-1]
+set.seed(1)
+cv_result <- cv.glmnet(x = crimes_model, 
+                       y = crimes$avg_hatecrimes_per_100k_fbi)
+plot(cv_result)
+coef(glmnet(x = crimes_model, 
+            y = crimes$avg_hatecrimes_per_100k_fbi, 
+            lambda = cv_result$lambda.min))
+```
+
