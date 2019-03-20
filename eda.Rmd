@@ -153,5 +153,5 @@ Now lets see where these states are in each group
 ```{r}
 clustered_states <- df2[order(df2$cluster),c("state","cluster")]
 ```
-
+Below is the colored in map, done manually. It seems that cluster 4 is regionally connected, located in southern United States. This suggests that that income inquality and share of trump voters are all similar in that region.
 ![](https://tinyurl.com/y49hqtws)
