@@ -15,21 +15,37 @@ b. What factors contribute to income inequality and in which way?
 
 ```{r, message=FALSE}
 library(readr)
-us_hate_crimes <- read_csv("data.csv")
+data <- read_csv("data.csv")
 ```
 
-We now perform 2 separate lasso regressions, with the `avg_hatecrimes_per_100k_fbi` and `gini_index` as outcome variables to assess which predictor variables we should select for further analysis.
+We now perform 2 separate lasso regressions, with the `avg_hatecrimes_per_100k_fbi` and `gini_index` as outcome variables to assess which predictor variables we should select for further analysis. The problem is that there are portions of missing data, so we only consider those states who have all collumns filled.
 ```{r, message=FALSE, warning= FALSE}
 library(glmnet)
-crimes <- us_hate_crimes[complete.cases(us_hate_crimes),]
+data_complete <- data[complete.cases(data),]
 crimes_model <- model.matrix(avg_hatecrimes_per_100k_fbi ~ . - state,
-                             data = crimes)[,-1]
+                             data = data_complete)[,-1]
+gini_model <- model.matrix(gini_index ~ . - state,
+                           data = data_complete)[,-1]
+
 set.seed(1)
 cv_result <- cv.glmnet(x = crimes_model, 
-                       y = crimes$avg_hatecrimes_per_100k_fbi)
+                       y = data_complete$avg_hatecrimes_per_100k_fbi)
+par(oma = c(0, 0, 3, 0))
 plot(cv_result)
+mtext("Average Hate Crimes Lasso Regression", line = 3)
+par(oma = rep(0, 4))
 coef(glmnet(x = crimes_model, 
-            y = crimes$avg_hatecrimes_per_100k_fbi, 
+            y = data_complete$avg_hatecrimes_per_100k_fbi, 
             lambda = cv_result$lambda.min))
+
+cv_result2 <- cv.glmnet(x = gini_model, 
+                        y = data_complete$gini_index)
+par(oma = c(0, 0, 3, 0))
+plot(cv_result2)
+mtext("Gini Index Lasso Regression", line = 3)
+par(oma = rep(0, 4))
+coef(glmnet(x = gini_model, 
+            y = data_complete$gini_index, 
+            lambda = cv_result2$lambda.min))
 ```
 
