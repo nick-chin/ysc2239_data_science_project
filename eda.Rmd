@@ -1,8 +1,9 @@
 ---
 title: "EDA"
-author: "Nick CHin"
+author: "Nick Chin"
 date: "March 19, 2019"
 output:
+  word_document: default
   html_document:
     df_print: paged
 ---
