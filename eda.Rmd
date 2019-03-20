@@ -11,41 +11,56 @@ We want to explore 2 different questions.
 
 a. Are statewide hate crimes linked to income inequality (and other possible predictors)?
 
-b. What factors contribute to income inequality and in which way?
+b. What factors contribute to income inequality and in which way? Can we find some clustered groups based off the selected predictor variables for income inequality?
 
 ```{r, message=FALSE}
 library(readr)
 data <- read_csv("data.csv")
 ```
 
-We now perform 2 separate lasso regressions, with the `avg_hatecrimes_per_100k_fbi` and `gini_index` as outcome variables to assess which predictor variables we should select for further analysis. The problem is that there are portions of missing data, so we only consider those states who have all collumns filled.
+For the first question, the data set provides us 2 different collections of hate crime. `avg_hatecrimes_per_100k_fbi` was hate crimes recorded between 2010-2015, whereas `hate_crimes_per_100k_splc` was hate crime incidents reported 10 days after the 2016 US presidential election. We now perform 2 separate lasso regressions, one on the FBI data and the other on the SPLC data. We can only consider the complete cases as there are some missing values for each subset of data.
 ```{r, message=FALSE, warning= FALSE}
 library(glmnet)
-data_complete <- data[complete.cases(data),]
-crimes_model <- model.matrix(avg_hatecrimes_per_100k_fbi ~ . - state,
-                             data = data_complete)[,-1]
-gini_model <- model.matrix(gini_index ~ . - state,
-                           data = data_complete)[,-1]
-
 set.seed(1)
-cv_result <- cv.glmnet(x = crimes_model, 
-                       y = data_complete$avg_hatecrimes_per_100k_fbi)
-par(oma = c(0, 0, 3, 0))
-plot(cv_result)
-mtext("Average Hate Crimes Lasso Regression", line = 3)
-par(oma = rep(0, 4))
-coef(glmnet(x = crimes_model, 
-            y = data_complete$avg_hatecrimes_per_100k_fbi, 
-            lambda = cv_result$lambda.min))
 
-cv_result2 <- cv.glmnet(x = gini_model, 
-                        y = data_complete$gini_index)
-par(oma = c(0, 0, 3, 0))
-plot(cv_result2)
-mtext("Gini Index Lasso Regression", line = 3)
-par(oma = rep(0, 4))
-coef(glmnet(x = gini_model, 
-            y = data_complete$gini_index, 
-            lambda = cv_result2$lambda.min))
+fbi_data <- data[-11]
+fbi_data <- fbi_data[complete.cases(fbi_data),]
+summary(lm(avg_hatecrimes_per_100k_fbi ~ . - state, data = fbi_data))
+# 
+# splc_data <- data[-12]
+# splc_data <- splc_data[complete.cases(splc_data),]
+
+fbi_crimes_model <- model.matrix(avg_hatecrimes_per_100k_fbi ~ . - state,
+                             data = fbi_data)[,-1]
+# splc_crimes_model <- model.matrix(hate_crimes_per_100k_splc ~ . - state,
+#                              data = splc_data)[,-1]
+
+
+fbi_result <- cv.glmnet(x = fbi_crimes_model, 
+                       y = fbi_data$avg_hatecrimes_per_100k_fbi)
+
+plot(fbi_result)
+coef(glmnet(x = fbi_crimes_model, 
+            y = fbi_data$avg_hatecrimes_per_100k_fbi, 
+            lambda = fbi_result$lambda.min))
+
+# splc_result <- cv.glmnet(x = splc_crimes_model, 
+#                        y = splc_data$hate_crimes_per_100k_splc)
+# coef(glmnet(x = splc_crimes_model, 
+#             y = splc_data$hate_crimes_per_100k_splc, 
+#             lambda = splc_result$lambda.min))
+```
+
+From the lasso regression, we see that `hate_crimes_per_100k_splc`, `median_household_income`, and `gini_index` are the 3 most significant predictors of `avg_hatecrimes_per_100k_fbi`. Since `hate_crimes_per_100k_splc` is another measure of hate crimes but from another organization, we can choose to ignore it as a predictor. Likewise, `median_household_income` would be highly correlated with `gini_index` since the calculation of the gini index takes into account the population's wealth, which would include the median household income. As such we also remove `median_household_income` as a predictor variable.
+
+```{r}
+# gini_model <- model.matrix(gini_index ~ . - state,
+#                            data = data_complete)[,-1]
+# cv_result2 <- cv.glmnet(x = gini_model, 
+#                         y = data_complete$gini_index)
+# 
+# coef(glmnet(x = gini_model, 
+#             y = data_complete$gini_index, 
+#             lambda = cv_result2$lambda.min))
 ```
 
