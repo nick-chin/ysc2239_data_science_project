@@ -1,0 +1,177 @@
+---
+title: "Report"
+author: "Nick Chin"
+date: "March 19, 2019"
+output:
+  html_document:
+    df_print: paged
+  word_document: default
+---
+
+We want to explore 2 different questions.
+
+a. Are gini coefficients of different states dependent on other statewide factors such as education or the demographic of the state?
+
+b. Are there clustering groups between state's gini coefficient and their share of trump voters?
+
+### __Part 1__
+
+```{r, message=FALSE}
+library(readr)
+df <- read_csv("data.csv")
+names(df) <- c("state", "med_house_income", "prop_unemployed",
+                 "prop_in_metro", "prop_hs_degree", "prop_non_cit",
+                 "prop_wht_poverty", "gini_index", "prop_non_wht",
+                 "prop_trump_vote", "splc_hate_crimes", "fbi_hate_crimes")
+```
+
+I renamed the data set to easily visualize for latter. Now we perform a matrix plot of all the columns except the state.
+
+```{r, message=FALSE, warning=FALSE, fig.width=8, fig.height=8}
+library(lattice)
+
+splom(~df[,-c(1,11,12)], groups = NULL, data = df,
+      axis.line.tck = 0,
+      axis.text.alpha = 0,
+      varname.cex = 0.6,
+      varname.srt = 90)
+```
+
+Seems that there is some form of linearity between gini index and proportion of those with a highschool degree & poportion of the population that is not white. We decided that we will want to find a model that has good predictive power of the gini index. As such, we decided to approach it using lasso regression. We also ignore predictors `splc_hate_crimes` and `fbi_hate_crimes` as the article have already concluded that income inequality is predictive of hate crimes. As we want to explore the what predictors are good predictors of income inequality, it would be sensible to ignore these two varaibles. We also ignore `state` as a predictor varaible as the name of the state should not be included in the model.
+
+We begin by performing the lasso regression with `gini_index` as the outcome varaible. However, `cv.glmnet()` only works when the matrix model and the data frame has the same amount of rows. In other words, it only works when the data has no missing values. As such, we would have to consider only the complete cases.
+
+```{r, message=FALSE, warning=FALSE}
+library(glmnet)
+df_complete <- df[complete.cases(df[,-c(11,12)]), -c(11,12)] # remove hate crimes data
+# and only keep the complete cases
+X <- model.matrix(gini_index ~ . - state, data = df_complete)[,-1]
+set.seed(1)
+cv_result <- cv.glmnet(x = X, y = df_complete$gini_index)
+plot(cv_result)
+coef(glmnet(x = X, y = df_complete$gini_index, lambda = cv_result$lambda.min))
+```
+
+From the lasso regression results, we see that it selects 4 predictor varaibles. Namely, it selects `prop_unemployed, prop_in_metro, prop_hs_degree, prop_trump_vote`. Now we can create the multivariate linear model and check for linear regression assumptions.
+
+```{r}
+model <- lm(gini_index ~ prop_unemployed + prop_in_metro + prop_hs_degree + prop_trump_vote,
+            data = df_complete)
+plot(model, which = c(1:2))
+plot(residuals(model), ylab = "Residuals", main = "Residuals vs Index")
+```
+
+For a linear regression, we need to check 4 different assumptions.
+
+  1. Linearity
+    + Looking at the Residuals vs. Fitted plot, we can see that the data is fairly linearly related, as the red line is mostly along the horizontal 0 line. The only part that is questionable is at high fitted values, where the red line drops down significantly.
+  2. Normality of Residuals
+    + Looking at the Q-Q plot, it looks like the distribution of residuals is fairly normal. There is one outlying point, index 9, which sits much further away from the theoretical line. Examining further, index 9 is District of Columbia, which is technichally not a state and is much smaller in terms of area than all other states (as it is the national capital). It's also likely that DC has outlying values in `prop_unemployed, prop_in_metro, prop_hs_degree, prop_trump_vote` as a significant proportion of the population are senators and other goverment figures, which is significantly different from the general populous.
+  3. Homoscedasticity
+    + Looking again at the Residuals vs. Fitted plot, we see that the data is fairly evenly spread about the red line. There are still some outlier data, namely indecies 7, 9, and 31. Which means Conneticut, District of Columbia, and New York are outlier data points. Despite them being outlying varaibles, the residuals are homoscedastic.
+  4. Independence of Residuals
+    + Looking at the Residuals vs. Index plot, there is no clear discernable pattern going from left to right. Hence, there is little evidence of dependent residuals.
+
+As a result, all 4 assumptions are met for the linear regression model. Now, we will look at the predictive power of the linear model.
+
+```{r}
+summary(model)
+```
+
+From this, we can see that the model has an adjusted R-squared value of 0.5812. This means that the linear mode explains roughly 58% of the varaince in the data. Overall, it is moderate in predicting gini index given the predictor varaibles.
+
+However, there is some limitations to our model. Firstly, the data wasn't a complete set. There were missing values for some states, which then resulted in some states not being included within the training data. Secondly, and more importantly, the data we used are only from individual years. The data on highschool degrees came from 2009, metropolitan areas from 2015, unemployment from 2016, and Trump votes from 2016. It would be a more robust model if we were able to train the model using data from various years to see if the gini index is truly dependent on these predictors.
+
+Furthermore, the proportion of Trump voters by state isn't a practical predictor of income inequality. As elections for specific presidents (in this case Trump) only occur every 4 years, it wouldn't make sense to use it as a predictor for income inequality in different years. An improvement could be proportion of Republicans or Democrats in population, which would have more practicality than those who voted for a specific president.
+
+### __Part 2__
+
+As a segway, it is interesting to note that there is some form of correlation between income inequality and the proportion of Trump voters by state. From this, we decided to explore classification of groups using k-means clustering.
+
+```{r, warning=FALSE, message=FALSE}
+library(ggplot2)
+
+ggplot(df, aes(gini_index, prop_trump_vote)) +
+  geom_point() +
+  ggtitle("Proportion of Trump Voters vs. Gini Index") +
+  xlab("Gini Index") +
+  ylab("Proportion of Trump Voters") +
+  annotate("text", 0.532, 0.04 + 0.05, label = "District of Columbia", hjust = "inward")
+  
+```
+
+From a quick and simple plot, we can see that the District of Columbia is a clear outlier in the data. So if we did a k-means clustering with it included, there will be one cluster (out of n many clusters) with only one data point containing solely DC. Since DC is also not a state, it is reasonable to not include it within the k-means clustering.
+
+Now we remove District of Columbia and color each point by their geographical region in the United States.
+
+```{r}
+df_region <- df[-9,]
+df_region$region <- state.region
+
+ggplot(data = df_region, aes(x = gini_index, y = prop_trump_vote, color = region)) +
+  geom_point() + theme(legend.position = "right") + 
+  ggtitle("Proportion of Trump Voters vs. Gini Index", subtitle = "Colored by Region") +
+  xlab("Gini Index") +
+  ylab("Proportion of Trump Voters")
+```
+
+We can clearly see that there is some form of grouping with the Southern region. North Central also has some grouping in the top left. Northeast and West regions are spread out a bit, but still occupy mainly the left and the bottom regions respectively. With this information, we then begin doing the k-means clustering.
+
+```{r, warning=FALSE, message=FALSE}
+library(plyr)
+library(cluster)
+library(graphics)
+library(grid)
+library(gridExtra)
+
+
+df_scaled <- scale(df[-9, -1]) # scale the data
+df_scaled <- cbind(df[-9, 1], df_scaled) # add back in the state names
+
+wss <- numeric(15)
+for (k in 1:15) wss[k] <- sum(kmeans(df_scaled[c("gini_index", "prop_trump_vote")], centers=k, nstart=25)$withinss)
+plot(1:15, wss, type="b", xlab="Number of Clusters", ylab="Within Sum ofSquares")
+```
+
+We standardize the data so that our k-means clustering is not affected by the scale of the data. Even if all the data was between [0, 1] in both gini index and proportion of Trump voters, we scale the data just to make it consistent. It seems that 4 clusters is an appropriate choice as the WSS decreases linearly for every additional cluster past that. Now we can plot the clusters.
+
+```{r}
+set.seed(1)
+
+km <- kmeans(df_scaled[c("gini_index", "prop_trump_vote")], 4, nstart=25)
+df2 <- as.data.frame(df_scaled)
+df2$cluster <- factor(km$cluster)
+centers <- as.data.frame(km$centers)
+centers_adj <- as.data.frame(centers$gini_index + c(-0.6, -0.6, 1, 0.5))
+centers_adj$prop_trump_vote <- centers$prop_trump_vote + c(0, -0.4, 0.6, 1.2)
+names(centers_adj) <- c("gini_index", "prop_trump_vote")
+
+gg_color_hue <- function(n) { # function to get colors
+  hues = seq(15, 375, length = n + 1)
+  hcl(h = hues, l = 65, c = 100)[1:n]
+} # from https://stackoverflow.com/questions/8197559/emulate-ggplot2-default-color-palette
+colors <- gg_color_hue(4)
+
+g2 <- ggplot(data = df2, aes(x = gini_index, y = prop_trump_vote, color = cluster )) +
+  geom_point() + theme(legend.position="right") +
+  geom_point(data = centers,
+             aes(x = gini_index, y = prop_trump_vote, color = as.factor(c(1,2,3,4))),
+             size = 10, alpha = .3, show.legend = FALSE) +
+  annotate("text", centers_adj$gini_index, centers_adj$prop_trump_vote, 
+           label = c("High Trump,\nLow Gini", "Low Trump,\nLow Gini", "Low Trump,\nHigh Gini", "High Trump, High Gini"),
+           color = colors) +
+  ggtitle("Clustering of Gini Index and Proportion of Trump Voters by State") +
+  xlab("Gini Index") + ylab("Proportion of Trump Voters") +
+  theme(legend.position = "none")
+
+plot(g2)
+```
+
+Now we have 4 distinct clusters of different gini index and proportion of trump voters. Finally lets color the map of the United states by the color of the custers.
+
+```{r}
+clustered_states <- df2[order(df2$cluster), c("state","cluster")]
+```
+
+Below is the colored in map, done manually. It seems that cluster 4 is regionally connected, located in southern United States. This suggests that that income inquality and share of trump voters are all similar in that region.
+![](clusters_on_map.png)
