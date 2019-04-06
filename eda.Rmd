@@ -3,9 +3,9 @@ title: "EDA"
 author: "Nick Chin"
 date: "March 19, 2019"
 output:
+  word_document: default
   html_document:
     df_print: paged
-  word_document: default
 ---
 
 We want to explore 2 different questions.

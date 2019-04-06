@@ -1,0 +1,120 @@
+---
+title: "Data Science Project Proposal"
+author: "Meghna, Nick, Coco"
+date: "3/25/2019"
+output:
+  html_document: default
+  word_document: default
+---
+Fivethirtyeight is a statistical analysis website that produces data on polling results, mainly for elections in America. The number 538 is derived from the number of electors in the American Electoral College system. Fivethirtyeight has been criticzed and praised at various occasions for their data analysis. One of the most notable times was when it predicted the vote winner for presidency accurately in all 50 states during the 2012 presidential elections. Another noteworthy instance is when it predicted a 71% chance of Hillary Clinton winning the presidency, on the eve of the 2016 election. Despite its successes and failures, Fivethirtyeight has generated reliable statistic relations that are of interest to people - journalists, reporters, public officials, and the general public. 
+
+The dataset we will be using for our report is called ["hatecrimes"](https://github.com/fivethirtyeight/data/blob/master/hate-crimes/hate_crimes.csv), which publishes statistics on hate crimes committed in all 52 states in America. All datasets in Fivethirtyeight have either a Creative Commons Licence, or an MIT Licence. This means that the data and our following analysis can be reproduced, shared, and broadcasted with the general public. 
+
+From this [article](https://fivethirtyeight.com/features/higher-rates-of-hate-crimes-are-tied-to-income-inequality/), Fivethrityeight report that hate crimes are linked to the gini coefficient, and that the gini coefficient is a good predictor of hate crimes. In this project, we aim to establish any relationships between the gini index and other variables. We also aim to see if there are any possible predictors in determining whether someone is likely to vote for Trump.
+
+Our research questions for the project are: 
+
+1. What predictors are good indicators of the gini index? Are there any that have good predictive power?
+2. What factors are linked to an increase in likelihood of people voting for Trump? Are there clustering groups between state's gini coefficient and their share of trump voters?
+3. Is there any interesting grouping between the gini index and the share of Trump voters? What do these groups look like regionally on the map?
+
+The project will be divided as such: 
+1. Nick - Exploratory analysis for Q2, Q3
+2. Coco - Exploratory analysis for Q1 
+3. Meghna - Report writing 
+
+The timeline of the project will be as such: 
+1. Meeting once every week for about 2 hours to collaborate and discuss findings.
+2. Meeting will be over the weekend since we have clashing timetables.
+3. Using the proposal to discover more interesting relations or study better variables of interest.
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(rpart)
+library(rpart.plot)
+library(climbeR)
+library(ranger)
+library(readr)
+```
+
+## __Exploratory Data Analysis__
+
+### _Question 1_
+
+```{r, message=FALSE}
+data <- read_csv("data.csv")
+names(data) <- c("state", "med_house_income", "prop_unemployed",
+                 "prop_in_metro", "prop_hs_degree", "prop_non_cit",
+                 "prop_wht_poverty", "gini_index", "prop_non_wht",
+                 "prop_trump_vote", "splc_hate_crimes", "fbi_hate_crimes")
+```
+
+Now we perform a matrix plot of all the columns except the state. This lets us see if there are any linear trends between `gini_index` and other variables.
+
+```{r, message=FALSE, warning=FALSE, fig.width=7, fig.height=7}
+library(lattice)
+
+splom(~data[-1], groups = NULL, data = data, axis.line.tck = 0, axis.text.alpha = 0, varname.cex = 0.6)
+```
+
+It seems that there is some form of linearity between the gini index and the proportion of those with a highschool degree & poportion of the population that is not white. Other variables that could have a moderate correlation with the gini index would be the hate crimes, as suggested by the article from fivethirtyeight. From here, we can do a possible forward selection to see if we can get any variables with good predictive performance on the gini index.
+
+### _Question 2_
+
+```{r,message=FALSE}
+hc <- read_csv("data.csv")
+head(hc)
+```
+
+The question begs a model to classify study subjects into trump-voters and non-trump-voters. More importantly, the question implicitly requires a logical causation over what factors contribute to voters' inclination towards Trump. With these in mind the best model is a decision tree. This also brings in the additional advantage that a decision tree model is robust with redundant or correlated variables, thus saving us trouble from pre-processing procedures like LASSO regression and scatterplot to determind which variables should be selected for the model.
+
+However, due to the structure of the dataset, we are unable to access information about individual voters (such as sociopolitical demographics or whether he/she is a Trump voter). Thus the validity of using a decision tree to study the question might not be foolproof. It makes sense to do LASSO regression to determine the most important variables, and then do some regression depending on the shape of the scatterplot. However, we decided to move forward with a decision tree because a decision tree would reveal the causual link regarding the general demographic conditions of states rather than individuals. We just need to discretise the share_voters_voted_trump by sorting and segmenting the variable. We also thought it best to showcase the different data analysis methods we have learnt from the course.
+
+```{r}
+sorted_hc <- hc[order(hc$share_voters_voted_trump),]
+sorted_hc$share_voters_voted_trump
+max(sorted_hc$share_voters_voted_trump)
+min(sorted_hc$share_voters_voted_trump)
+```
+
+From the above result, we decided to discretise the variable into 3 categories: below 0.3, 0.3 to 0.6, and above 0.6
+
+```{r}
+trump_cutPoints <- c(0, 0.3, 0.6, 1)
+hc$trump_category <- cut(hc$share_voters_voted_trump, breaks = trump_cutPoints)
+```
+
+The Decision tree algorithm implemented by rpart, as detailed in class, is too time-consuming for our dataset. We did a short research and found that the ranger function is a fast implementation of random forests recursive partitioning that is particularly suited for high dimensional data. As  introduced in the textbook, random forests train  different parts of the same training set by repeatedly selecting a random subset of the features at each candidate split (feature bagging). Our predictions are done done by taking the modes.
+
+```{r}
+complete_hc <- hc[complete.cases(hc),]
+drops <- c("share_voters_voted_trump", "state")
+train <- complete_hc[,!(names(complete_hc) %in% drops)]
+
+rft <- ranger(trump_category ~ ., data = train, write.forest = TRUE, importance = "impurity", num.trees=500, min.node.size = 3)
+```
+
+Now let's assess the strength of different features
+
+```{r}
+vimp <- sort(rft$variable.importance, decreasing = TRUE)
+vimp
+```
+As printed above in descending order, the most significant predictors of Trump voter percentage within a state are median household income, white poverty percentage, share of population in metro areas (in that order). Somewhat contrary to some analysis we read from popular media, share of non-citizens, share of seasonable unemployment and frequency of hate crimes are not good predictors for percentage of trump voters. 
+
+### _Question 3_
+
+Now to see if there are any interesting groupings between the gini index and the share of Trump voters, we can look at the simple scatterplot between the two varaibles. We can also color them according to the region each state is from. Since the District of Columbia is not considered a state, we decided to omit its data point from the plot
+
+```{r, warning=FALSE, message=FALSE}
+library(ggplot2)
+
+data_region <- data[-9,]
+data_region$region <- state.region
+
+ggplot(data = data_region, aes(x = gini_index, y = prop_trump_vote, color = region)) +
+  geom_point() + theme(legend.position = "right")
+```
+
+As we can see from here, there seems to be a very distinct grouping of the Southern states that have a high gini index and a high proportion of Trump voters. Likewise, states in the Northeast are a bit more spread out, but all have lower than 50% of the state population voting for Trump. The North Central region does seem to have its own grouping with a higher proportion of Trump voters and relatively lower gini index, although some states seem to be much further from the others. From this graph, there is reason to believe that there is a regional trend in grouping between gini index and the proportion of Trump voters.
