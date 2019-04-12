@@ -1,11 +1,8 @@
 ---
 title: "Report"
-author: "Nick Chin"
+author: "Nick Chin, Meghna Ray, Coco Cau Jinglu"
 date: "March 19, 2019"
-output:
-  html_document:
-    df_print: paged
-  word_document: default
+output: html_document
 ---
 
 We want to explore 2 different questions.
@@ -37,9 +34,9 @@ splom(~df[,-c(1,11,12)], groups = NULL, data = df,
       varname.srt = 90)
 ```
 
-Seems that there is some form of linearity between gini index and proportion of those with a highschool degree & poportion of the population that is not white. We decided that we will want to find a model that has good predictive power of the gini index. As such, we decided to approach it using lasso regression. We also ignore predictors `splc_hate_crimes` and `fbi_hate_crimes` as the article have already concluded that income inequality is predictive of hate crimes. As we want to explore the what predictors are good predictors of income inequality, it would be sensible to ignore these two varaibles. We also ignore `state` as a predictor varaible as the name of the state should not be included in the model.
+It seems that there is some form of linearity between gini index and proportion of those with a highschool degree & poportion of the population that is not white. We decided that we will want to find a model that has good predictive power of the gini index. As such, we decided to approach it using lasso regression. We also ignore predictors `splc_hate_crimes` and `fbi_hate_crimes` as the article  already concluded that income inequality is predictive of hate crimes. Since we want to explore the what predictors are good predictors of income inequality, it would be sensible to ignore these two variables We also ignore `state` as a predictor variable as the name of the state should not be included in the model.
 
-We begin by performing the lasso regression with `gini_index` as the outcome varaible. However, `cv.glmnet()` only works when the matrix model and the data frame has the same amount of rows. In other words, it only works when the data has no missing values. As such, we would have to consider only the complete cases.
+We begin by performing the lasso regression with `gini_index` as the outcome variable. However, `cv.glmnet()` only works when the matrix model and the data frame has the same amount of rows. In other words, it only works when the data has no missing values. As such, we would have to consider only the complete cases.
 
 ```{r, message=FALSE, warning=FALSE}
 library(glmnet)
@@ -52,7 +49,7 @@ plot(cv_result)
 coef(glmnet(x = X, y = df_complete$gini_index, lambda = cv_result$lambda.min))
 ```
 
-From the lasso regression results, we see that it selects 4 predictor varaibles. Namely, it selects `prop_unemployed, prop_in_metro, prop_hs_degree, prop_trump_vote`. Now we can create the multivariate linear model and check for linear regression assumptions.
+From the lasso regression results, we see that it selects 4 predictor variables. Namely, it selects `prop_unemployed, prop_in_metro, prop_hs_degree, prop_trump_vote`. Now we can create the multivariate linear model. But first, lets  check for linear regression assumptions.
 
 ```{r}
 model <- lm(gini_index ~ prop_unemployed + prop_in_metro + prop_hs_degree + prop_trump_vote,
@@ -64,12 +61,12 @@ plot(residuals(model), ylab = "Residuals", main = "Residuals vs Index")
 For a linear regression, we need to check 4 different assumptions.
 
   1. Linearity
-    + Looking at the Residuals vs. Fitted plot, we can see that the data is fairly linearly related, as the red line is mostly along the horizontal 0 line. The only part that is questionable is at high fitted values, where the red line drops down significantly.
+    + Looking at the Residuals vs. Fitted plot, we can see that the data is fairly linearly related, as the red line is mostly along the horizontal 0 line. The only part that is questionable is at high fitted values, where the red line drops down significantly. But it can be attributed to the outliers so we can ignore it for now. 
   2. Normality of Residuals
     + Looking at the Q-Q plot, it looks like the distribution of residuals is fairly normal. There is one outlying point, index 9, which sits much further away from the theoretical line. Examining further, index 9 is District of Columbia, which is technichally not a state and is much smaller in terms of area than all other states (as it is the national capital). It's also likely that DC has outlying values in `prop_unemployed, prop_in_metro, prop_hs_degree, prop_trump_vote` as a significant proportion of the population are senators and other goverment figures, which is significantly different from the general populous.
   3. Homoscedasticity
     + Looking again at the Residuals vs. Fitted plot, we see that the data is fairly evenly spread about the red line. There are still some outlier data, namely indecies 7, 9, and 31. Which means Conneticut, District of Columbia, and New York are outlier data points. Despite them being outlying varaibles, the residuals are homoscedastic.
-  4. Independence of Residuals
+  4. Independence of variables
     + Looking at the Residuals vs. Index plot, there is no clear discernable pattern going from left to right. Hence, there is little evidence of dependent residuals.
 
 As a result, all 4 assumptions are met for the linear regression model. Now, we will look at the predictive power of the linear model.
@@ -78,7 +75,7 @@ As a result, all 4 assumptions are met for the linear regression model. Now, we 
 summary(model)
 ```
 
-From this, we can see that the model has an adjusted R-squared value of 0.5812. This means that the linear mode explains roughly 58% of the varaince in the data. Overall, it is moderate in predicting gini index given the predictor varaibles.
+From this, we can see that the model has an adjusted R-squared value of 0.5812. This means that the linear mode explains roughly 58% of the variance in the data. Overall, it is moderate in predicting gini index given the predictor variables.
 
 However, there is some limitations to our model. Firstly, the data wasn't a complete set. There were missing values for some states, which then resulted in some states not being included within the training data. Secondly, and more importantly, the data we used are only from individual years. The data on highschool degrees came from 2009, metropolitan areas from 2015, unemployment from 2016, and Trump votes from 2016. It would be a more robust model if we were able to train the model using data from various years to see if the gini index is truly dependent on these predictors.
 
@@ -174,4 +171,4 @@ clustered_states <- df2[order(df2$cluster), c("state","cluster")]
 ```
 
 Below is the colored in map, done manually. It seems that cluster 4 is regionally connected, located in southern United States. This suggests that that income inquality and share of trump voters are all similar in that region.
-![](clusters_on_map.png)
+![](https://raw.githubusercontent.com/nick-chin/data_science_project/master/clusters_on_map.png?token=AqHN48xviX-DzvOEOo0jdgyxVDnTBFYiks5cuH0gwA%3D%3D)
